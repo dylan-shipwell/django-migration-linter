@@ -119,9 +119,10 @@ class MigrationLinter:
         migration_name: str | None = None,
         git_commit_id: str | None = None,
         migrations_file_path: str | None = None,
+        resolve_nested_apps: bool | None = True,
     ) -> None:
         # Collect migrations.
-        migrations_list = self.read_migrations_list(migrations_file_path)
+        migrations_list = self.read_migrations_list(migrations_file_path, resolve_nested_apps)
         if git_commit_id:
             migrations = self._gather_migrations_git(git_commit_id, migrations_list)
         else:
