@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from appdirs import user_cache_dir
 
-__version__ = "4.1.0"
+__version__ = "4.1.1-shipwell0.1.0-dev1"
 
 DEFAULT_CACHE_PATH = user_cache_dir("django-migration-linter", version=__version__)
 
