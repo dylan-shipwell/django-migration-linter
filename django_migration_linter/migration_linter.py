@@ -340,6 +340,43 @@ class MigrationLinter:
             and "__init__" not in filename
         )
 
+
+    _appconfigs_relpath_index = None
+    @property
+    def appconfigs_relpath_index(self):
+        if self._appconfigs_relpath_index is None:
+            self._appconfigs_relpath_index = {
+                os.path.relpath(v.path, settings.BASE_DIR): k
+                for k,v in apps.app_configs.items()
+            }
+        return self._appconfigs_relpath_index
+
+    def _resolve_nested_apps(self, migration_file: str) -> tuple[str, str] | None:
+        prefix, name = split_migration_prefix(migration_file)
+        prefix = os.path.relpath(prefix, settings.BASE_DIR)
+        if prefix in self.appconfigs_relpath_index:
+            app_label = apps.app_configs[self.appconfigs_relpath_index[prefix]].label
+            return (app_label, name, None)
+
+        return (None, None, prefix)
+
+    def _resolve_nested_apps_or_split_migration_path(
+            self,
+            migration_file: str,
+            resolve_nested_apps: bool | None = True
+    ) -> tuple[str, str]:
+        if resolve_nested_apps:
+            app_label, name, prefix = self._resolve_nested_apps(migration_file)
+            if app_label is not None:
+                return (app_label, name)
+
+            logger.warning(
+                "IndexError: key %r not in relative django.apps.apps.app_configs[].path list, assuming app_label is parent folder name of ./migrations",
+                prefix
+            )
+
+        return split_migration_path(migration_file)
+
     @classmethod
     def read_migrations_list(
         cls, migrations_file_path: str | None,
@@ -353,33 +390,13 @@ class MigrationLinter:
         if not migrations_file_path:
             return None
 
-        appconfigs_relpath_index = dict()
-        if resolve_nested_apps:
-            appconfigs_relpath_index = {
-                os.path.relpath(v.path, settings.BASE_DIR): k
-                for k,v in apps.app_configs.items()
-            }
 
         migrations = []
         try:
             with open(migrations_file_path) as file:
                 for line in file:
                     if cls.is_migration_file(line):
-                        if resolve_nested_apps:
-                            prefix, name = split_migration_prefix(line)
-                            if prefix in appconfigs_relpath_index:
-                                app_label = apps.app_configs[appconfigs_relpath_index[prefix]].label
-                                migrations.append((app_label, name))
-                                continue
-
-                            else:
-                                logger.warning(
-                                    "IndexError: key %r not in relative django.apps.apps.app_configs[].path list, assuming app_label is parent folder name of ./migrations",
-                                    prefix
-                                )
-
-                        app_label, name = split_migration_path(line)
-                        migrations.append((app_label, name))
+                        migrations.append(self._resolve_nested_apps_or_split_migration_path(line, resolve_nested_apps))
         except OSError:
             logger.exception("Migrations list path not found %s", migrations_file_path)
             raise Exception("Error while reading migrations list file")
@@ -390,6 +407,29 @@ class MigrationLinter:
                 migrations_file_path,
             )
         return migrations
+
+    def _gather_migrations_git__inner(
+            self, line: str,
+            migrations_list: list[tuple[str, str]] | None = None,
+            resolve_nested_apps: bool | None = True
+    ) -> tuple[str, str]:
+        # Only gather lines that include added migrations
+        if self.is_migration_file(line):
+            app_label, name = self._resolve_nested_apps_or_split_migration_path(line, resolve_nested_apps)
+            if migrations_list is None or (app_label, name) in migrations_list:
+                if (app_label, name) in self.migration_loader.disk_migrations:
+                    migration = self.migration_loader.disk_migrations[
+                        app_label, name
+                    ]
+                    return migration
+                else:
+                    logger.info(
+                        "Found migration file (%s, %s) "
+                        "that is not present in loaded migration.",
+                        app_label,
+                        name,
+                    )
+        return None
 
     def _gather_migrations_git(
         self, git_commit_id: str, migrations_list: list[tuple[str, str]] | None = None
@@ -404,22 +444,9 @@ class MigrationLinter:
         for line in map(
             clean_bytes_to_str, diff_process.stdout.readlines()  # type: ignore
         ):
-            # Only gather lines that include added migrations
-            if self.is_migration_file(line):
-                app_label, name = split_migration_path(line)
-                if migrations_list is None or (app_label, name) in migrations_list:
-                    if (app_label, name) in self.migration_loader.disk_migrations:
-                        migration = self.migration_loader.disk_migrations[
-                            app_label, name
-                        ]
-                        migrations.append(migration)
-                    else:
-                        logger.info(
-                            "Found migration file (%s, %s) "
-                            "that is not present in loaded migration.",
-                            app_label,
-                            name,
-                        )
+            migration = self._gather_migrations_git__inner(line, migrations_list)
+            if migration is not None:
+                migrations.append(migrations_list, migration)
         diff_process.wait()
 
         if diff_process.returncode != 0:

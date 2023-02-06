@@ -165,3 +165,40 @@ class LinterFunctionsTestCase(unittest.TestCase):
             ]
         )
         self.assertEqual(2, len(list(migrations)))
+
+    def test_gather_migration_git_correct(self):
+        linter = MigrationLinter(only_applied_migrations=True)
+        migrations = [
+            linter._gather_migrations_git__inner("tests/test_project/app_correct/migrations/0001_initial.py"),
+            linter._gather_migrations_git__inner("tests/test_project/app_correct/migrations/0002_foo.py"),
+        ]
+        self.assertEqual(
+            [
+                (migrations[0].app_label, migrations[0].name),
+                (migrations[1].app_label, migrations[1].name),
+            ],
+            [
+                ("app_correct", "0001_initial"),
+                ("app_correct", "0002_foo"),
+            ],
+        )
+
+    def test_gather_migration_git_nested(self):
+        linter = MigrationLinter("test/test_project", only_applied_migrations=True)
+        migrations = [
+            linter._gather_migrations_git__inner("tests/test_project/app_nested/app_subapp/migrations/0001_initial.py"),
+            linter._gather_migrations_git__inner("tests/test_project/app_nested/app_subapp/migrations/0002_foo.py"),
+        ]
+
+        self.assertTrue(migrations[0])
+        self.assertTrue(migrations[1])
+        self.assertEqual(
+            [
+                (migrations[0].app_label, migrations[0].name),
+                (migrations[1].app_label, migrations[1].name),
+            ],
+            [
+                ("app_nested_app_subapp", "0001_initial"),
+                ("app_nested_app_subapp", "0002_foo"),
+            ],
+        )
