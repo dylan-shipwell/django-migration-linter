@@ -137,6 +137,25 @@ class LinterFunctionsTestCase(unittest.TestCase):
             migration_list,
         )
 
+    def test_read_migrations_app_subapp_legacy(self):
+        tmp = tempfile.NamedTemporaryFile(mode="w", delete=False)
+        tmp.write(
+            "test_project/app_nested/app_subapp/migrations/0001_create_table.py\n"
+        )
+        tmp.write("unknown\n")
+        tmp.write(
+            "test_project/app_nested/app_subapp/migrations/0002_add_new_not_null_field.py\n"
+        )
+        tmp.close()
+        migration_list = MigrationLinter.read_migrations_list(tmp.name, resolve_nested_apps=False)
+        self.assertEqual(
+            [
+                ("app_subapp", "0001_create_table"),
+                ("app_subapp", "0002_add_new_not_null_field"),
+            ],
+            migration_list,
+        )
+
     def test_read_migrations_app_subapp(self):
         tmp = tempfile.NamedTemporaryFile(mode="w", delete=False)
         tmp.write(
@@ -147,7 +166,7 @@ class LinterFunctionsTestCase(unittest.TestCase):
             "test_project/app_nested/app_subapp/migrations/0002_add_new_not_null_field.py\n"
         )
         tmp.close()
-        migration_list = MigrationLinter.read_migrations_list(tmp.name)
+        migration_list = MigrationLinter.read_migrations_list(tmp.name, resolve_nested_apps=True)
         self.assertEqual(
             [
                 ("app_nested_app_subapp", "0001_create_table"),

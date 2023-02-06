@@ -42,6 +42,17 @@ class MessageType(Enum):
         return list(map(lambda c: c.value, MessageType))
 
 
+
+_appconfigs_relpath_index = None
+def appconfigs_relpath_index():
+    global _appconfigs_relpath_index
+    if _appconfigs_relpath_index is None:
+        _appconfigs_relpath_index = {
+            os.path.relpath(v.path, settings.BASE_DIR): k
+            for k,v in apps.app_configs.items()
+        }
+    return _appconfigs_relpath_index
+
 class MigrationLinter:
     def __init__(
         self,
@@ -124,7 +135,7 @@ class MigrationLinter:
         # Collect migrations.
         migrations_list = self.read_migrations_list(migrations_file_path, resolve_nested_apps)
         if git_commit_id:
-            migrations = self._gather_migrations_git(git_commit_id, migrations_list)
+            migrations = self._gather_migrations_git(git_commit_id, migrations_list, resolve_nested_apps)
         else:
             migrations = self._gather_all_migrations(migrations_list)
 
@@ -341,32 +352,21 @@ class MigrationLinter:
         )
 
 
-    _appconfigs_relpath_index = None
-    @property
-    def appconfigs_relpath_index(self):
-        if self._appconfigs_relpath_index is None:
-            self._appconfigs_relpath_index = {
-                os.path.relpath(v.path, settings.BASE_DIR): k
-                for k,v in apps.app_configs.items()
-            }
-        return self._appconfigs_relpath_index
-
-    def _resolve_nested_apps(self, migration_file: str) -> tuple[str, str] | None:
+    def _resolve_nested_apps(migration_file: str) -> tuple[str, str] | None:
         prefix, name = split_migration_prefix(migration_file)
-        prefix = os.path.relpath(prefix, settings.BASE_DIR)
-        if prefix in self.appconfigs_relpath_index:
-            app_label = apps.app_configs[self.appconfigs_relpath_index[prefix]].label
+        prefix = os.path.normpath(os.path.relpath(prefix, settings.BASE_DIR))
+        if prefix in appconfigs_relpath_index():
+            app_label = apps.app_configs[appconfigs_relpath_index()[prefix]].label
             return (app_label, name, None)
 
         return (None, None, prefix)
 
     def _resolve_nested_apps_or_split_migration_path(
-            self,
             migration_file: str,
             resolve_nested_apps: bool | None = True
     ) -> tuple[str, str]:
         if resolve_nested_apps:
-            app_label, name, prefix = self._resolve_nested_apps(migration_file)
+            app_label, name, prefix = MigrationLinter._resolve_nested_apps(migration_file)
             if app_label is not None:
                 return (app_label, name)
 
@@ -396,7 +396,7 @@ class MigrationLinter:
             with open(migrations_file_path) as file:
                 for line in file:
                     if cls.is_migration_file(line):
-                        migrations.append(self._resolve_nested_apps_or_split_migration_path(line, resolve_nested_apps))
+                        migrations.append(cls._resolve_nested_apps_or_split_migration_path(line, resolve_nested_apps))
         except OSError:
             logger.exception("Migrations list path not found %s", migrations_file_path)
             raise Exception("Error while reading migrations list file")
@@ -415,7 +415,7 @@ class MigrationLinter:
     ) -> tuple[str, str]:
         # Only gather lines that include added migrations
         if self.is_migration_file(line):
-            app_label, name = self._resolve_nested_apps_or_split_migration_path(line, resolve_nested_apps)
+            app_label, name = MigrationLinter._resolve_nested_apps_or_split_migration_path(line, resolve_nested_apps)
             if migrations_list is None or (app_label, name) in migrations_list:
                 if (app_label, name) in self.migration_loader.disk_migrations:
                     migration = self.migration_loader.disk_migrations[
@@ -432,7 +432,8 @@ class MigrationLinter:
         return None
 
     def _gather_migrations_git(
-        self, git_commit_id: str, migrations_list: list[tuple[str, str]] | None = None
+        self, git_commit_id: str, migrations_list: list[tuple[str, str]] | None = None,
+        resolve_nested_apps: bool | None = True
     ) -> Iterable[Migration]:
         migrations = []
         # Get changes since specified commit
@@ -444,9 +445,9 @@ class MigrationLinter:
         for line in map(
             clean_bytes_to_str, diff_process.stdout.readlines()  # type: ignore
         ):
-            migration = self._gather_migrations_git__inner(line, migrations_list)
+            migration = self._gather_migrations_git__inner(line, migrations_list, resolve_nested_apps)
             if migration is not None:
-                migrations.append(migrations_list, migration)
+                migrations.append(migration)
         diff_process.wait()
 
         if diff_process.returncode != 0:
