@@ -14,6 +14,7 @@ from django.core.management import call_command
 from django.db import DEFAULT_DB_ALIAS, ProgrammingError, connections
 from django.db.migrations import Migration, RunPython, RunSQL
 from django.db.migrations.operations.base import Operation
+from django.apps import apps
 
 from .cache import Cache
 from .constants import (
@@ -24,7 +25,7 @@ from .constants import (
 from .operations import IgnoreMigration
 from .sql_analyser import analyse_sql_statements, get_sql_analyser_class
 from .sql_analyser.base import Issue
-from .utils import clean_bytes_to_str, get_migration_abspath, split_migration_path
+from .utils import clean_bytes_to_str, get_migration_abspath, split_migration_path, split_migration_prefix
 
 logger = logging.getLogger("django_migration_linter")
 
@@ -340,7 +341,8 @@ class MigrationLinter:
 
     @classmethod
     def read_migrations_list(
-        cls, migrations_file_path: str | None
+        cls, migrations_file_path: str | None,
+        resolve_nested_apps: bool | None = True
     ) -> list[tuple[str, str]] | None:
         """
         Returning an empty list is different from returning None here.
@@ -350,11 +352,31 @@ class MigrationLinter:
         if not migrations_file_path:
             return None
 
+        appconfigs_relpath_index = dict()
+        if resolve_nested_apps:
+            appconfigs_relpath_index = {
+                os.path.relpath(v.path, settings.BASE_DIR): k
+                for k,v in apps.app_configs.items()
+            }
+
         migrations = []
         try:
             with open(migrations_file_path) as file:
                 for line in file:
                     if cls.is_migration_file(line):
+                        if resolve_nested_apps:
+                            prefix, name = split_migration_prefix(line)
+                            if prefix in appconfigs_relpath_index:
+                                app_label = apps.app_configs[appconfigs_relpath_index[prefix]].label
+                                migrations.append((app_label, name))
+                                continue
+
+                            else:
+                                logger.warning(
+                                    "IndexError: key %r not in relative django.apps.apps.app_configs[].path list, assuming app_label is parent folder name of ./migrations",
+                                    prefix
+                                )
+
                         app_label, name = split_migration_path(line)
                         migrations.append((app_label, name))
         except OSError:
