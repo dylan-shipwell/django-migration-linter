@@ -211,8 +211,8 @@ class LinterFunctionsTestCase(unittest.TestCase):
     def test_gather_migration_git_nested(self):
         linter = MigrationLinter("tests/test_project", only_applied_migrations=True)
         migrations = [
-            linter._gather_migrations_git__inner("app_nested/app_subapp/migrations/0001_initial.py"),
-            linter._gather_migrations_git__inner("app_nested/app_subapp/migrations/0002_foo.py"),
+            linter._gather_migrations_git__inner("app_nested/app_subapp/migrations/0001_initial.py", resolve_nested_apps=True),
+            linter._gather_migrations_git__inner("app_nested/app_subapp/migrations/0002_foo.py", resolve_nested_apps=True),
         ]
 
         self.assertTrue(migrations[0])
