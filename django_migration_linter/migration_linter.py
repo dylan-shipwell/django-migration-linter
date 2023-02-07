@@ -354,7 +354,6 @@ class MigrationLinter:
 
     def _resolve_nested_apps(migration_file: str) -> tuple[str, str] | None:
         prefix, name = split_migration_prefix(migration_file)
-        prefix = os.path.normpath(os.path.relpath(prefix, settings.BASE_DIR))
         if prefix in appconfigs_relpath_index():
             app_label = apps.app_configs[appconfigs_relpath_index()[prefix]].label
             return (app_label, name, None)
@@ -374,6 +373,7 @@ class MigrationLinter:
                 "IndexError: key %r not in relative django.apps.apps.app_configs[].path list, assuming app_label is parent folder name of ./migrations",
                 prefix
             )
+            #raise IndexError('key %r' % prefix)
 
         return split_migration_path(migration_file)
 
@@ -415,6 +415,9 @@ class MigrationLinter:
     ) -> tuple[str, str]:
         # Only gather lines that include added migrations
         if self.is_migration_file(line):
+            if os.getcwd() != self.django_path:
+                if not line.startswith(os.path.basename(self.django_path)):
+                    line = os.path.join(os.path.basename(self.django_path), line)
             app_label, name = MigrationLinter._resolve_nested_apps_or_split_migration_path(line, resolve_nested_apps)
             if migrations_list is None or (app_label, name) in migrations_list:
                 if (app_label, name) in self.migration_loader.disk_migrations:

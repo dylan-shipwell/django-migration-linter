@@ -4,6 +4,8 @@ import tempfile
 import unittest
 
 from django.db.migrations import Migration
+from django.test import tag
+
 
 from django_migration_linter import MigrationLinter
 
@@ -74,6 +76,7 @@ class LinterFunctionsTestCase(unittest.TestCase):
         self.assertFalse(linter.should_ignore_migration("app_correct", "0002_foo"))
         self.assertFalse(linter.should_ignore_migration("app_correct", "0003_bar"))
 
+    @tag('gather')
     def test_gather_all_migrations(self):
         linter = MigrationLinter()
         migrations = linter._gather_all_migrations()
@@ -175,6 +178,7 @@ class LinterFunctionsTestCase(unittest.TestCase):
             migration_list,
         )
 
+    @tag('gather')
     def test_gather_migrations_with_list(self):
         linter = MigrationLinter()
         migrations = linter._gather_all_migrations(
@@ -185,11 +189,12 @@ class LinterFunctionsTestCase(unittest.TestCase):
         )
         self.assertEqual(2, len(list(migrations)))
 
+    @tag('gather')
     def test_gather_migration_git_correct(self):
-        linter = MigrationLinter(only_applied_migrations=True)
+        linter = MigrationLinter("tests/test_project", only_applied_migrations=True)
         migrations = [
-            linter._gather_migrations_git__inner("tests/test_project/app_correct/migrations/0001_initial.py"),
-            linter._gather_migrations_git__inner("tests/test_project/app_correct/migrations/0002_foo.py"),
+            linter._gather_migrations_git__inner("app_correct/migrations/0001_initial.py"),
+            linter._gather_migrations_git__inner("app_correct/migrations/0002_foo.py"),
         ]
         self.assertEqual(
             [
@@ -202,11 +207,12 @@ class LinterFunctionsTestCase(unittest.TestCase):
             ],
         )
 
+    @tag('gather')
     def test_gather_migration_git_nested(self):
-        linter = MigrationLinter("test/test_project", only_applied_migrations=True)
+        linter = MigrationLinter("tests/test_project", only_applied_migrations=True)
         migrations = [
-            linter._gather_migrations_git__inner("tests/test_project/app_nested/app_subapp/migrations/0001_initial.py"),
-            linter._gather_migrations_git__inner("tests/test_project/app_nested/app_subapp/migrations/0002_foo.py"),
+            linter._gather_migrations_git__inner("app_nested/app_subapp/migrations/0001_initial.py"),
+            linter._gather_migrations_git__inner("app_nested/app_subapp/migrations/0002_foo.py"),
         ]
 
         self.assertTrue(migrations[0])
