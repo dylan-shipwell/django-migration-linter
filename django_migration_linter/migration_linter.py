@@ -130,7 +130,7 @@ class MigrationLinter:
         migration_name: str | None = None,
         git_commit_id: str | None = None,
         migrations_file_path: str | None = None,
-        resolve_nested_apps: bool | None = True,
+        resolve_nested_apps: bool | None = False,
     ) -> None:
         # Collect migrations.
         migrations_list = self.read_migrations_list(migrations_file_path, resolve_nested_apps)
@@ -362,7 +362,7 @@ class MigrationLinter:
 
     def _resolve_nested_apps_or_split_migration_path(
             migration_file: str,
-            resolve_nested_apps: bool | None = True
+            resolve_nested_apps: bool | None = False
     ) -> tuple[str, str]:
         if resolve_nested_apps:
             app_label, name, prefix = MigrationLinter._resolve_nested_apps(migration_file)
@@ -380,7 +380,7 @@ class MigrationLinter:
     @classmethod
     def read_migrations_list(
         cls, migrations_file_path: str | None,
-        resolve_nested_apps: bool | None = True
+        resolve_nested_apps: bool | None = False
     ) -> list[tuple[str, str]] | None:
         """
         Returning an empty list is different from returning None here.
@@ -411,7 +411,7 @@ class MigrationLinter:
     def _gather_migrations_git__inner(
             self, line: str,
             migrations_list: list[tuple[str, str]] | None = None,
-            resolve_nested_apps: bool | None = True
+            resolve_nested_apps: bool | None = False
     ) -> tuple[str, str]:
         # Only gather lines that include added migrations
         if self.is_migration_file(line):
@@ -436,7 +436,7 @@ class MigrationLinter:
 
     def _gather_migrations_git(
         self, git_commit_id: str, migrations_list: list[tuple[str, str]] | None = None,
-        resolve_nested_apps: bool | None = True
+        resolve_nested_apps: bool | None = False
     ) -> Iterable[Migration]:
         migrations = []
         # Get changes since specified commit
